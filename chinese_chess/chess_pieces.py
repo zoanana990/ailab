@@ -22,7 +22,9 @@ class General(ChessPiece):
             return False
         dx = abs(new_position[0] - self.position[0])
         dy = abs(new_position[1] - self.position[1])
-        return (dx == 1 and dy == 0) or (dx == 0 and dy == 1)
+        if (dx == 1 and dy == 0) or (dx == 0 and dy == 1):
+            return not board.is_general_facing_general(new_position)
+        return False
 
 class Advisor(ChessPiece):
     def get_name(self):
@@ -40,13 +42,12 @@ class Elephant(ChessPiece):
         return "相" if self.color == "red" else "象"
 
     def is_valid_move(self, new_position, board):
-        if (self.color == "red" and new_position[1] > 4) or (self.color == "black" and new_position[1] < 5):
+        if ((self.color == "red") == board.red_at_bottom) == (new_position[1] < 5):
             return False
         dx = abs(new_position[0] - self.position[0])
         dy = abs(new_position[1] - self.position[1])
         if dx != 2 or dy != 2:
             return False
-        # Check if the elephant's eye is blocked
         eye_x = (self.position[0] + new_position[0]) // 2
         eye_y = (self.position[1] + new_position[1]) // 2
         return not board.is_piece_at((eye_x, eye_y))
@@ -76,7 +77,7 @@ class Chariot(ChessPiece):
 
 class Cannon(ChessPiece):
     def get_name(self):
-        return "炮" if self.color == "red" else "包"
+        return "炮" if self.color == "red" else "砲"
 
     def is_valid_move(self, new_position, board):
         if not board.is_within_board(new_position):
@@ -98,6 +99,7 @@ class Cannon(ChessPiece):
 
         return False
 
+
 class Soldier(ChessPiece):
     def get_name(self):
         return "兵" if self.color == "red" else "卒"
@@ -105,13 +107,15 @@ class Soldier(ChessPiece):
     def is_valid_move(self, new_position, board):
         dx = new_position[0] - self.position[0]
         dy = new_position[1] - self.position[1]
-        if self.color == "red":
-            if self.position[1] < 5:  # Not crossed river
-                return dx == 0 and dy == 1
-            else:  # Crossed river
-                return (dx == 0 and dy == 1) or (abs(dx) == 1 and dy == 0)
-        else:  # black
+        forward = -1 if (self.color == "red") == board.red_at_bottom else 1
+
+        if (self.color == "red") == board.red_at_bottom:
             if self.position[1] > 4:  # Not crossed river
-                return dx == 0 and dy == -1
+                return dx == 0 and dy == forward
             else:  # Crossed river
-                return (dx == 0 and dy == -1) or (abs(dx) == 1 and dy == 0)
+                return (dx == 0 and dy == forward) or (abs(dx) == 1 and dy == 0)
+        else:
+            if self.position[1] < 5:  # Not crossed river
+                return dx == 0 and dy == forward
+            else:  # Crossed river
+                return (dx == 0 and dy == forward) or (abs(dx) == 1 and dy == 0)

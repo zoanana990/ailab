@@ -2,7 +2,9 @@ import pygame
 from chess_pieces import General, Advisor, Elephant, Horse, Chariot, Cannon, Soldier
 
 class ChessBoard:
-    def __init__(self, width, height):
+    def __init__(self, width, height, red_at_bottom=True):
+        self.red_at_bottom = red_at_bottom
+
         self.WIDTH = width
         self.HEIGHT = height
         self.BOARD_SIZE_W = 720
@@ -23,28 +25,34 @@ class ChessBoard:
         self.dragging = False
 
     def setup_pieces(self):
-        # Red pieces
+        self.pieces = []
+        bottom_color = "red" if self.red_at_bottom else "black"
+        top_color = "black" if self.red_at_bottom else "red"
+
+        # Bottom pieces
         self.pieces.extend([
-            General("red", (4, 0)),
-            Advisor("red", (3, 0)), Advisor("red", (5, 0)),
-            Elephant("red", (2, 0)), Elephant("red", (6, 0)),
-            Horse("red", (1, 0)), Horse("red", (7, 0)),
-            Chariot("red", (0, 0)), Chariot("red", (8, 0)),
-            Cannon("red", (1, 2)), Cannon("red", (7, 2)),
-            Soldier("red", (0, 3)), Soldier("red", (2, 3)), Soldier("red", (4, 3)),
-            Soldier("red", (6, 3)), Soldier("red", (8, 3))
+            General(bottom_color, (4, 9)),
+            Advisor(bottom_color, (3, 9)), Advisor(bottom_color, (5, 9)),
+            Elephant(bottom_color, (2, 9)), Elephant(bottom_color, (6, 9)),
+            Horse(bottom_color, (1, 9)), Horse(bottom_color, (7, 9)),
+            Chariot(bottom_color, (0, 9)), Chariot(bottom_color, (8, 9)),
+            Cannon(bottom_color, (1, 7)), Cannon(bottom_color, (7, 7)),
+            Soldier(bottom_color, (0, 6)), Soldier(bottom_color, (2, 6)),
+            Soldier(bottom_color, (4, 6)), Soldier(bottom_color, (6, 6)),
+            Soldier(bottom_color, (8, 6)),
         ])
 
-        # Black pieces
+        # Top pieces
         self.pieces.extend([
-            General("black", (4, 9)),
-            Advisor("black", (3, 9)), Advisor("black", (5, 9)),
-            Elephant("black", (2, 9)), Elephant("black", (6, 9)),
-            Horse("black", (1, 9)), Horse("black", (7, 9)),
-            Chariot("black", (0, 9)), Chariot("black", (8, 9)),
-            Cannon("black", (1, 7)), Cannon("black", (7, 7)),
-            Soldier("black", (0, 6)), Soldier("black", (2, 6)), Soldier("black", (4, 6)),
-            Soldier("black", (6, 6)), Soldier("black", (8, 6))
+            General(top_color, (4, 0)),
+            Advisor(top_color, (3, 0)), Advisor(top_color, (5, 0)),
+            Elephant(top_color, (2, 0)), Elephant(top_color, (6, 0)),
+            Horse(top_color, (1, 0)), Horse(top_color, (7, 0)),
+            Chariot(top_color, (0, 0)), Chariot(top_color, (8, 0)),
+            Cannon(top_color, (1, 2)), Cannon(top_color, (7, 2)),
+            Soldier(top_color, (0, 3)), Soldier(top_color, (2, 3)),
+            Soldier(top_color, (4, 3)), Soldier(top_color, (6, 3)),
+            Soldier(top_color, (8, 3)),
         ])
 
     def count_pieces_between(self, start, end):
@@ -67,22 +75,36 @@ class ChessBoard:
 
     def is_within_palace(self, position, color):
         x, y = position
-        if color == "red":
-            return 3 <= x <= 5 and 0 <= y <= 2
-        else:  # black
+        if (color == "red" and self.red_at_bottom) or (color == "black" and not self.red_at_bottom):
             return 3 <= x <= 5 and 7 <= y <= 9
+        else:
+            return 3 <= x <= 5 and 0 <= y <= 2
 
-    def is_general_facing_general(self):
+    def is_general_facing_general(self, new_position=None):
         red_general = next((p for p in self.pieces if isinstance(p, General) and p.color == "red"), None)
         black_general = next((p for p in self.pieces if isinstance(p, General) and p.color == "black"), None)
 
-        if red_general and black_general and red_general.position[0] == black_general.position[0]:
-            min_y = min(red_general.position[1], black_general.position[1])
-            max_y = max(red_general.position[1], black_general.position[1])
-            return not any(p for p in self.pieces
-                           if p.position[0] == red_general.position[0]
-                           and min_y < p.position[1] < max_y)
-        return False
+        if not red_general or not black_general:
+            return False
+
+        if new_position:
+            if isinstance(self.get_piece_at(new_position), General):
+                if self.get_piece_at(new_position).color == "red":
+                    red_general.position = new_position
+                else:
+                    black_general.position = new_position
+
+        if red_general.position[0] != black_general.position[0]:
+            return False
+
+        min_y = min(red_general.position[1], black_general.position[1])
+        max_y = max(red_general.position[1], black_general.position[1])
+
+        for y in range(min_y + 1, max_y):
+            if self.get_piece_at((red_general.position[0], y)):
+                return False
+
+        return True
 
     def is_in_check(self, color):
         general = next((p for p in self.pieces if isinstance(p, General) and p.color == color), None)
@@ -155,6 +177,18 @@ class ChessBoard:
                 if self.is_piece_at((x, y1)):
                     return False
         return True
+
+    def is_general_captured(self):
+        red_general = any(p for p in self.pieces if isinstance(p, General) and p.color == "red")
+        black_general = any(p for p in self.pieces if isinstance(p, General) and p.color == "black")
+        return not (red_general and black_general)
+
+    def get_winner(self):
+        if not any(p for p in self.pieces if isinstance(p, General) and p.color == "red"):
+            return "black"
+        if not any(p for p in self.pieces if isinstance(p, General) and p.color == "black"):
+            return "red"
+        return None
 
     def update_piece_position(self, piece, new_position):
         piece.position = new_position
