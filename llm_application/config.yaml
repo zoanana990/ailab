@@ -1,0 +1,17 @@
+# config.yaml
+api_key: "AIzaSyD4lZxZMua7hQvB8cZJDYPwIU5U8_Nl3Ng"
+model_name: "gemini-pro"
+safety_settings:
+  - category: "HARM_CATEGORY_HARASSMENT"
+    threshold: "BLOCK_NONE"
+  - category: "HARM_CATEGORY_HATE_SPEECH"
+    threshold: "BLOCK_NONE"
+  - category: "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+    threshold: "BLOCK_NONE"
+  - category: "HARM_CATEGORY_DANGEROUS_CONTENT"
+    threshold: "BLOCK_NONE"
+temperature:
+  min: 0.0
+  max: 1.0
+  default: 0.5
+  step: 0.1
