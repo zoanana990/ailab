@@ -1,4 +1,5 @@
 import pygame
+import mlx.core as mx
 from chess_pieces import General, Advisor, Elephant, Horse, Chariot, Cannon, Soldier
 
 class ChessBoard:
@@ -23,6 +24,26 @@ class ChessBoard:
         self.setup_pieces()
         self.selected_piece = None
         self.dragging = False
+
+        self.piece_to_channel = {
+            "General": 0,
+            "Advisor": 1,
+            "Elephant": 2,
+            "Horse": 3,
+            "Chariot": 4,
+            "Cannon": 5,
+            "Soldier": 6
+        }
+
+    def get_state(self):
+        state = mx.zeros((7, 9, 10))  # 7 種棋子類型，9x10 的棋盤
+        for piece in self.pieces:
+            x, y = piece.position
+            piece_type = type(piece).__name__
+            color = 1 if piece.color == "red" else -1
+            channel = self.piece_to_channel[piece_type]
+            state[channel, x, y] = color
+        return state
 
     def setup_pieces(self):
         self.pieces = []
@@ -262,3 +283,39 @@ class ChessBoard:
             text = self.font.render(piece.get_name(), True, color)
             text_rect = text.get_rect(center=(x, y))
             screen.blit(text, text_rect)
+
+    def get_state(self):
+        # 將棋盤狀態轉換為神經網絡的輸入格式
+        state = mx.zeros((9, 9, 10))
+        for piece in self.pieces:
+            x, y = piece.position
+            piece_type = type(piece).__name__
+            color = 1 if piece.color == "red" else -1
+            channel = self.piece_to_channel[piece_type]
+            state[channel, x, y] = color
+        return state
+
+    def get_legal_moves(self, color):
+        # 獲取所有合法移動
+        legal_moves = []
+        for piece in self.pieces:
+            if piece.color == color:
+                for x in range(9):
+                    for y in range(10):
+                        if piece.is_valid_move((x, y), self):
+                            legal_moves.append((piece.position, (x, y)))
+        return legal_moves
+
+    def make_move(self, move):
+        from_pos, to_pos = move
+        piece = self.get_piece_at(from_pos)
+        if piece:
+            captured_piece = self.get_piece_at(to_pos)
+            if captured_piece:
+                self.pieces.remove(captured_piece)
+            self.update_piece_position(piece, to_pos)
+
+    def is_game_over(self):
+        return self.is_checkmate("red") or self.is_checkmate("black") or self.is_stalemate("red") or self.is_stalemate(
+            "black")
+
