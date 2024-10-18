@@ -1,5 +1,6 @@
 import pygame
 import sys
+import os
 import mlx.core as mx
 from chess_board import ChessBoard
 from ai import ChessNet, MCTS, train_network
@@ -20,40 +21,49 @@ class GameWindow:
         self.setup_mode_selection()
         self.ai_training = False
         self.ai_game_count = 0
-
-    def start_ai_training(self):
         self.model_red = ChessNet()
         self.model_black = ChessNet()
         self.mcts_red = MCTS(self.model_red)
         self.mcts_black = MCTS(self.model_black)
+
+    def start_ai_training(self):
+        self.ai_training = True
         self.training_games = []
-        self.num_games = 100  # 設置訓練遊戲數量
-
-        for _ in range(self.num_games):
-            game = self.play_ai_vs_ai_game()
-            self.training_games.append(game)
-
-        train_network(self.model_red, self.training_games)
-        train_network(self.model_black, self.training_games)
+        self.ai_game_count = 0
+        self.board = ChessBoard(self.width, self.height)
+        self.current_player = "red"
 
     def play_ai_vs_ai_game(self):
-        self.board = ChessBoard(self.width, self.height)
-        game_states = []
-        current_player = "red"
-
-        while not self.board.is_game_over():
+        if not self.board.is_game_over():
             state = self.board.get_state()
-            legal_moves = self.board.get_legal_moves(current_player)
-            if current_player == "red":
+            legal_moves = self.board.get_legal_moves(self.current_player)
+            if self.current_player == "red":
                 action = self.mcts_red.get_action(state, legal_moves)
             else:
                 action = self.mcts_black.get_action(state, legal_moves)
+
+            # 执行移动
             self.board.make_move(action)
-            game_states.append((state, action, current_player))
-            current_player = self.get_opposite_color(current_player)
 
-        return game_states
+            # 切换玩家
+            self.current_player = self.get_opposite_color(self.current_player)
 
+            # 绘制当前游戏状态
+            self.draw_game()
+            pygame.display.flip()
+            pygame.time.wait(500)  # 添加短暂延迟，使得棋局变化可见
+        else:
+            # 游戏结束，记录游戏状态并开始新游戏
+            self.training_games.append(self.board.get_game_history())
+            self.ai_game_count += 1
+            self.board = ChessBoard(self.width, self.height)
+            self.current_player = "red"
+
+            if self.ai_game_count % 10 == 0:  # 每10局游戏训练一次
+                train_network(self.model_red, self.training_games)
+                train_network(self.model_black, self.training_games)
+                self.save_models()
+                self.training_games = []  # 清空训练游戏列表
 
     def setup_mode_selection(self):
         self.buttons = [
@@ -61,38 +71,6 @@ class GameWindow:
             {"text": "Human vs Human", "rect": pygame.Rect(250, 370, 300, 50), "color": (200, 200, 200)},
             {"text": "AI Training", "rect": pygame.Rect(250, 440, 300, 50), "color": (200, 200, 200)}
         ]
-
-    def start_ai_training(self):
-        self.ai_training = True
-        self.model_red = ChessNet()
-        self.model_black = ChessNet()
-        self.mcts_red = MCTS(self.model_red)
-        self.mcts_black = MCTS(self.model_black)
-        self.training_games = []
-        self.ai_game_count = 0
-
-    def play_ai_vs_ai_game(self):
-        self.board = ChessBoard(self.width, self.height)
-        game_states = []
-        current_player = "red"
-
-        while not self.board.is_game_over():
-            state = self.board.get_state()
-            legal_moves = self.board.get_legal_moves(current_player)
-            if current_player == "red":
-                action = self.mcts_red.get_action(state, legal_moves)
-            else:
-                action = self.mcts_black.get_action(state, legal_moves)
-            self.board.make_move(action)
-            game_states.append((state, action, current_player))
-            current_player = self.get_opposite_color(current_player)
-
-            # 繪製當前遊戲狀態
-            self.draw_game()
-            pygame.display.flip()
-            pygame.time.wait(100)  # 添加短暫延遲，使得棋局變化可見
-
-        return game_states
 
     def play_ai_game(self):
         self.board = ChessBoard(self.width, self.height)
@@ -166,16 +144,7 @@ class GameWindow:
             elif self.mode == "human_vs_human":
                 self.draw_game()
             elif self.mode == "ai_training" and self.ai_training:
-                game = self.play_ai_vs_ai_game()
-                self.training_games.append(game)
-                self.ai_game_count += 1
-
-                if self.ai_game_count % 10 == 0:  # 每10局遊戲訓練一次
-                    train_network(self.model_red, self.training_games)
-                    train_network(self.model_black, self.training_games)
-                    self.save_models()
-                    self.training_games = []  # 清空訓練遊戲列表
-
+                self.play_ai_vs_ai_game()
                 self.draw_ai_training_info()
 
             pygame.display.flip()
@@ -229,10 +198,14 @@ class GameWindow:
         return None
 
     def draw_ai_training_info(self):
-        self.screen.fill((255, 255, 255))
-        text = self.font.render(f"AI Training in progress. Games played: {self.ai_game_count}", True, (0, 0, 0))
-        text_rect = text.get_rect(center=(self.width // 2, self.height // 2))
-        self.screen.blit(text, text_rect)
+        info_surface = pygame.Surface((200, 100))
+        info_surface.fill((255, 255, 255))
+        font = pygame.font.Font(None, 24)
+        text = font.render(f"Games: {self.ai_game_count}", True, (0, 0, 0))
+        info_surface.blit(text, (10, 10))
+        text = font.render(f"Player: {self.current_player}", True, (0, 0, 0))
+        info_surface.blit(text, (10, 40))
+        self.screen.blit(info_surface, (self.width - 210, 10))
 
     def save_models(self):
         if not os.path.exists('models'):

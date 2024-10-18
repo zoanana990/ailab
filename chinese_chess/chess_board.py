@@ -36,7 +36,7 @@ class ChessBoard:
         }
 
     def get_state(self):
-        state = mx.zeros((7, 9, 10))  # 7 種棋子類型，9x10 的棋盤
+        state = mx.zeros((7, 9, 10))  # 7 kinds of chess pieces, 9 * 10 chess board
         for piece in self.pieces:
             x, y = piece.position
             piece_type = type(piece).__name__
