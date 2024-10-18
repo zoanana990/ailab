@@ -1,27 +1,84 @@
-import mlx.core as mx
-import mlx.nn as nn
 import math
+import mlx.core as mx
 
-class ChessNet(nn.Module):
+def manual_conv2d(x, weight, bias):
+    batch, in_channels, height, width = x.shape
+    out_channels, in_channels, kernel_height, kernel_width = weight.shape
+
+    padded_x = mx.pad(x, ((0, 0), (0, 0), (1, 1), (1, 1)), mode='constant')
+
+    output = mx.zeros((batch, out_channels, height, width))
+
+    for i in range(height):
+        for j in range(width):
+            patch = padded_x[:, :, i:i+kernel_height, j:j+kernel_width]
+            for c in range(out_channels):
+                output[:, c, i, j] = mx.sum(patch * weight[c], axis=(1, 2, 3))
+
+    return output + bias.reshape(1, -1, 1, 1)
+
+def manual_linear(x, weight, bias):
+    return mx.matmul(x, weight.T) + bias
+
+class ChessNet:
     def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(7, 32, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
-        self.fc1 = nn.Linear(128 * 9 * 10, 512)
-        self.fc2 = nn.Linear(512, 256)
-        self.policy_head = nn.Linear(256, 9 * 10 * 9 * 10)
-        self.value_head = nn.Linear(256, 1)
+        # 卷積層權重和偏置
+        self.conv1_weight = mx.random.normal((32, 1, 3, 3))
+        self.conv1_bias = mx.zeros((32,))
+        self.conv2_weight = mx.random.normal((64, 32, 3, 3))
+        self.conv2_bias = mx.zeros((64,))
+        self.conv3_weight = mx.random.normal((128, 64, 3, 3))
+        self.conv3_bias = mx.zeros((128,))
+
+        # 全連接層權重和偏置
+        self.fc1_weight = mx.random.normal((512, 128 * 9 * 90))
+        self.fc1_bias = mx.zeros((512,))
+        self.fc2_weight = mx.random.normal((256, 512))
+        self.fc2_bias = mx.zeros((256,))
+        self.policy_head_weight = mx.random.normal((9 * 10 * 9 * 10, 256))
+        self.policy_head_bias = mx.zeros((9 * 10 * 9 * 10,))
+        self.value_head_weight = mx.random.normal((1, 256))
+        self.value_head_bias = mx.zeros((1,))
 
     def __call__(self, x):
-        x = nn.relu(self.conv1(x))
-        x = nn.relu(self.conv2(x))
-        x = nn.relu(self.conv3(x))
-        x = x.reshape(-1, 128 * 9 * 10)
-        x = nn.relu(self.fc1(x))
-        x = nn.relu(self.fc2(x))
-        policy = self.policy_head(x)
-        value = mx.tanh(self.value_head(x))
+        print("Input shape:", x.shape)
+        print("Input dtype:", x.dtype)
+
+        x = x.reshape(-1, 1, 9, 90)
+        print("After reshape:", x.shape)
+
+        # Conv1
+        x = manual_conv2d(x, self.conv1_weight, self.conv1_bias)
+        print("After conv1:", x.shape)
+        x = mx.maximum(x, 0)  # ReLU
+
+        # Conv2
+        x = manual_conv2d(x, self.conv2_weight, self.conv2_bias)
+        print("After conv2:", x.shape)
+        x = mx.maximum(x, 0)  # ReLU
+
+        # Conv3
+        x = manual_conv2d(x, self.conv3_weight, self.conv3_bias)
+        print("After conv3:", x.shape)
+        x = mx.maximum(x, 0)  # ReLU
+
+        x = x.reshape(-1, 128 * 9 * 90)
+        print("Before fc1:", x.shape)
+
+        # FC1
+        x = manual_linear(x, self.fc1_weight, self.fc1_bias)
+        x = mx.maximum(x, 0)  # ReLU
+
+        # FC2
+        x = manual_linear(x, self.fc2_weight, self.fc2_bias)
+        x = mx.maximum(x, 0)  # ReLU
+
+        # Policy head
+        policy = manual_linear(x, self.policy_head_weight, self.policy_head_bias)
+
+        # Value head
+        value = mx.tanh(manual_linear(x, self.value_head_weight, self.value_head_bias))
+
         return policy, value
 
 class MCTSNode:
@@ -50,10 +107,19 @@ class MCTS:
                 node = self.select_child(node)
                 search_path.append(node)
 
-            # 確保輸入形狀正確
+            # 确保输入形状正确
             model_input = mx.array(node.state)
-            model_input = mx.transpose(model_input, (1, 2, 0))  # 從 (7, 9, 10) 轉換為 (9, 10, 7)
-            model_input = mx.reshape(model_input, (1, 9, 10, 9))  # 添加批次維度
+
+            # 检查输入形状并进行必要的调整
+            if model_input.shape == (9, 9, 10):
+                # 如果输入形状为 (9, 9, 10)，添加一个通道维度使其变为 (9, 9, 10, 1)
+                model_input = mx.expand_dims(model_input, axis=-1)
+                # 然后转置为 (1, 1, 9, 90)，这样可以被解释为一个 9x90 的单通道输入
+                model_input = mx.transpose(model_input, (3, 2, 0, 1))
+                model_input = mx.reshape(model_input, (1, 1, 9, 90))
+            else:
+                raise ValueError(f"Unexpected input shape: {model_input.shape}. Expected (9, 9, 10).")
+
             policy, value = self.model(model_input)
             policy = mx.reshape(policy, (9, 10, 9, 10))
             value = value.item()
@@ -64,22 +130,25 @@ class MCTS:
         return max(root.children, key=lambda c: c.visits).action
 
     def select_child(self, node):
+        if not node.children:
+            return node  # 如果節點沒有子節點，直接返回該節點
         return max(node.children, key=lambda c: self.ucb_score(node, c))
 
     def ucb_score(self, parent, child):
+        if child.visits == 0:
+            return float('inf')  # 返回無窮大，確保未訪問的節點會被選中
         q_value = 1 - ((child.value / child.visits) + 1) / 2
-        return q_value + self.c_puct * math.sqrt(parent.visits) / (1 + child.visits)
+        return q_value + self.c_puct * child.prior * (math.sqrt(parent.visits) / (1 + child.visits))
 
     def expand(self, node, policy, legal_moves):
         for move in legal_moves:
-            from_pos, to_pos = move
-            action_prob = policy[from_pos[0], from_pos[1], to_pos[0], to_pos[1]].item()
-            child_state = self.apply_move(node.state, move)
-            child = MCTSNode(child_state, parent=node, action=move)
-            node.children.append(child)
+            if move in policy:
+                prob = policy[move]
+                child = MCTSNode(self.get_next_state(node.state, move), parent=node, action=move, prior=prob)
+                node.children.append(child)
 
-    def backpropagate(self, search_path, value):
-        for node in reversed(search_path):
+    def backpropagate(self, path, value):
+        for node in reversed(path):
             node.visits += 1
             node.value += value
             value = 1 - value
