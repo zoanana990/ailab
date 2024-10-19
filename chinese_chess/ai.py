@@ -41,42 +41,19 @@ class ChessNet:
         self.value_head_bias = mx.zeros((1,))
 
     def __call__(self, x):
-        print("Input shape:", x.shape)
-        print("Input dtype:", x.dtype)
-
         x = x.reshape(-1, 1, 9, 90)
-        print("After reshape:", x.shape)
-
-        # Conv1
         x = manual_conv2d(x, self.conv1_weight, self.conv1_bias)
-        print("After conv1:", x.shape)
-        x = mx.maximum(x, 0)  # ReLU
-
-        # Conv2
+        x = mx.maximum(x, 0)
         x = manual_conv2d(x, self.conv2_weight, self.conv2_bias)
-        print("After conv2:", x.shape)
-        x = mx.maximum(x, 0)  # ReLU
-
-        # Conv3
+        x = mx.maximum(x, 0)
         x = manual_conv2d(x, self.conv3_weight, self.conv3_bias)
-        print("After conv3:", x.shape)
-        x = mx.maximum(x, 0)  # ReLU
-
+        x = mx.maximum(x, 0)
         x = x.reshape(-1, 128 * 9 * 90)
-        print("Before fc1:", x.shape)
-
-        # FC1
         x = manual_linear(x, self.fc1_weight, self.fc1_bias)
-        x = mx.maximum(x, 0)  # ReLU
-
-        # FC2
+        x = mx.maximum(x, 0)
         x = manual_linear(x, self.fc2_weight, self.fc2_bias)
-        x = mx.maximum(x, 0)  # ReLU
-
-        # Policy head
+        x = mx.maximum(x, 0)
         policy = manual_linear(x, self.policy_head_weight, self.policy_head_bias)
-
-        # Value head
         value = mx.tanh(manual_linear(x, self.value_head_weight, self.value_head_bias))
 
         return policy, value
@@ -96,7 +73,7 @@ class MCTS:
         self.num_simulations = num_simulations
         self.c_puct = c_puct
 
-    def get_action(self, state, legal_moves):
+    def get_action(self, state, legal_moves, player_color):
         root = MCTSNode(state)
 
         for _ in range(self.num_simulations):
@@ -127,7 +104,9 @@ class MCTS:
             self.expand(node, policy, legal_moves)
             self.backpropagate(search_path, value)
 
-        return max(root.children, key=lambda c: c.visits).action
+        best_action = max(root.children, key=lambda c: c.visits).action
+        print_move(player_color, best_action)
+        return best_action
 
     def select_child(self, node):
         if not node.children:
@@ -183,3 +162,7 @@ def process_game(game):
     # 這裡需要實現將遊戲狀態轉換為神經網絡輸入的邏輯
     # 為了簡化，這裡返回空數據，實際應用中需要修改
     return mx.array([]), mx.array([]), mx.array([])
+
+def print_move(action):
+    from_pos, to_pos = action
+    print(f"Move: {from_pos} to {to_pos}")

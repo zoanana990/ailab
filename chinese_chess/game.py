@@ -38,9 +38,9 @@ class GameWindow:
             state = self.board.get_state()
             legal_moves = self.board.get_legal_moves(self.current_player)
             if self.current_player == "red":
-                action = self.mcts_red.get_action(state, legal_moves)
+                action = self.mcts_red.get_action(state, legal_moves, "red")
             else:
-                action = self.mcts_black.get_action(state, legal_moves)
+                action = self.mcts_black.get_action(state, legal_moves, "black")
 
             # 执行移动
             self.board.make_move(action)
